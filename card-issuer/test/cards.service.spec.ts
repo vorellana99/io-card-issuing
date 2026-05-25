@@ -117,6 +117,21 @@ describe('CardsService', () => {
     expect(event.data.forceError).toBe(true);
   });
 
+  it('usa false como valor por defecto cuando forceError no se provee', async () => {
+    const repo = makeRepo();
+    const publisher = makePublisher();
+    const service = new CardsService(repo as any, publisher as any);
+    const dto = validDto();
+    (dto as any).forceError = undefined;
+
+    await service.issue(dto);
+
+    const savedEntity = repo.save.mock.calls[0][0];
+    expect(savedEntity.forceError).toBe(false);
+    const [, event] = publisher.publish.mock.calls[0];
+    expect(event.data.forceError).toBe(false);
+  });
+
   describe('getStatus', () => {
     it('devuelve requestId, status y updatedAt cuando existe', async () => {
       const record: CardRequest = {

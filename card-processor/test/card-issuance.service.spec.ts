@@ -34,10 +34,11 @@ function makePublisher(): PublisherMock {
   };
 }
 
-function makeRepo() {
+function makeRepo(existing: Record<string, unknown> | null = null) {
   return {
     create: jest.fn((data) => data),
     save: jest.fn(async (data) => data),
+    findOne: jest.fn(async () => existing),
   };
 }
 
@@ -54,6 +55,29 @@ const payload: CardRequestedPayload = {
 };
 
 describe('CardIssuanceService', () => {
+  it('usa valores por defecto cuando el config no provee las variables de simulación', async () => {
+    const emptyConfig = { get: jest.fn().mockReturnValue(undefined) };
+    const publisher = makePublisher();
+    const repo = makeRepo();
+
+    const service = new CardIssuanceService(emptyConfig as any, publisher as any, repo as any);
+
+    // Solo verificamos que el servicio se construye sin lanzar
+    expect(service).toBeInstanceOf(CardIssuanceService);
+  });
+
+  it('acepta payload sin forceError (undefined) y emite con éxito', async () => {
+    const publisher = makePublisher();
+    const repo = makeRepo();
+    const service = new CardIssuanceService(makeConfig() as any, publisher as any, repo as any);
+    const payloadSinForceError = { ...payload, forceError: undefined };
+
+    await service.handle('source-0', payloadSinForceError);
+
+    const [topic] = publisher.publish.mock.calls[0];
+    expect(topic).toBe('io.cards.issued.v1');
+  });
+
   it('en caso de éxito persiste y publica io.cards.issued.v1', async () => {
     const publisher = makePublisher();
     const repo = makeRepo();
@@ -97,6 +121,7 @@ describe('CardIssuanceService', () => {
       expect(event.source).toBe('source-2');
       expect(event.data.error.reason).toMatch(/forceError/);
       expect(event.data.error.attempts).toBe(3);
+      expect(event.data.error.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(event.data.originalPayload.customer.documentNumber).toBe('11564321');
     } finally {
       jest.useRealTimers();
@@ -123,5 +148,18 @@ describe('CardIssuanceService', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('evento duplicado es descartado sin reprocesar (idempotencia)', async () => {
+    const existingCard = { cardId: 'card-existing', requestId: 'source-dup' };
+    const repo = makeRepo(existingCard);
+    const publisher = makePublisher();
+    const service = new CardIssuanceService(makeConfig() as any, publisher as any, repo as any);
+
+    await service.handle('source-dup', payload);
+
+    expect(repo.findOne).toHaveBeenCalledWith({ where: { requestId: 'source-dup' } });
+    expect(repo.save).not.toHaveBeenCalled();
+    expect(publisher.publish).not.toHaveBeenCalled();
   });
 });

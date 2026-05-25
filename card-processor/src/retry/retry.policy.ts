@@ -16,6 +16,8 @@ export interface RetryAttemptInfo {
 export function delayForAttempt(attempt: number): number {
   if (attempt <= 1) return 0;
   const idx = attempt - 2;
+  // idx < 0 es código defensivo inalcanzable: attempt <= 1 ya retornó arriba.
+  /* istanbul ignore next */
   if (idx < 0 || idx >= RETRY_DELAYS_MS.length) return 0;
   return RETRY_DELAYS_MS[idx];
 }

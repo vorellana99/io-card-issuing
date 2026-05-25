@@ -41,6 +41,16 @@ export class CardIssuanceService {
   }
 
   async handle(source: string, payload: CardRequestedPayload): Promise<void> {
+    const existing = await this.cardRepo.findOne({ where: { requestId: source } });
+    if (existing) {
+      this.logger.warn({
+        msg: 'Evento duplicado descartado (idempotencia)',
+        source,
+        cardId: existing.cardId,
+      });
+      return;
+    }
+
     this.logger.log({
       msg: 'Procesando solicitud de tarjeta',
       source,
@@ -73,9 +83,12 @@ export class CardIssuanceService {
       return;
     }
 
+    // result.error es siempre un Error cuando runWithRetries falla (garantizado por retry.policy).
+    // El fallback 'unknown' es defensivo e inalcanzable en la práctica.
+    /* istanbul ignore next */
     const reason = result.error?.message ?? 'unknown';
     const dlq: DlqPayload = {
-      error: { reason, attempts: MAX_RETRIES },
+      error: { reason, attempts: MAX_RETRIES, timestamp: new Date().toISOString() },
       originalPayload: payload,
     };
     const dlqEvent = this.publisher.buildEvent(source, 2, EventTypes.CARD_REQUESTED_DLQ, dlq);

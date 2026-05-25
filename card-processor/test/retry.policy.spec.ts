@@ -18,6 +18,11 @@ describe('retry.policy', () => {
     expect(delayForAttempt(4)).toBe(4000);
   });
 
+  it('delayForAttempt retorna 0 cuando attempt supera el máximo de reintentos', () => {
+    expect(delayForAttempt(5)).toBe(0);
+    expect(delayForAttempt(100)).toBe(0);
+  });
+
   it('retorna éxito si el primer intento es ok (sin reintentos)', async () => {
     const task = jest.fn(async () => 'ok');
     const result = await runWithRetries(task);
@@ -50,6 +55,24 @@ describe('retry.policy', () => {
       expect(onFail.mock.calls[1][0].delayMs).toBe(1000);
       expect(onFail.mock.calls[2][0].delayMs).toBe(2000);
       expect(onFail.mock.calls[3][0].delayMs).toBe(4000);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('envuelve en Error cuando el task lanza un valor no-Error', async () => {
+    jest.useFakeTimers();
+    try {
+      const task = jest.fn(async () => {
+        throw 'string error';
+      });
+      const onFail = jest.fn();
+      const promise = runWithRetries(task, onFail);
+      await jest.advanceTimersByTimeAsync(1000 + 2000 + 4000 + 10);
+      const result = await promise;
+      expect(result.success).toBe(false);
+      expect(result.error).toBeInstanceOf(Error);
+      expect(result.error?.message).toBe('string error');
     } finally {
       jest.useRealTimers();
     }
