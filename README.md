@@ -4,25 +4,43 @@ Sistema de emisión de tarjetas basado en eventos construido con NestJS, Kafka y
 
 ## Arquitectura
 
-```
-POST /cards/issue
-      │
-      ▼
- card-issuer  ──► io.card.requested.v1 ──► card-processor
-      ▲                                           │
-      │                                           ▼
-GET /cards/:id/status        io.cards.issued.v1 / io.card.requested.v1.dlq
-      │                                           │
-      └───────────────────────────────────────────┘
-                  (actualiza card_requests.status)
+El cliente HTTP interactúa únicamente con `card-issuer`. La emisión real de la tarjeta ocurre de forma asíncrona: `card-issuer` publica un evento en Kafka y `card-processor` lo procesa. Una vez que `card-processor` termina, publica el resultado de vuelta en Kafka y `card-issuer` lo consume para actualizar el estado de la solicitud.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Cliente
+  participant Issuer as card-issuer<br/>(REST :3000)
+  participant Kafka
+  participant Processor as card-processor
+
+  Cliente->>Issuer: POST /cards/issue
+  Issuer-->>Cliente: 202 Accepted { requestId, status: PENDING }
+  Issuer->>Kafka: publica io.card.requested.v1
+
+  Kafka->>Processor: entrega io.card.requested.v1
+  note over Processor: simula emisión<br/>reintenta hasta 3 veces
+
+  alt éxito
+    Processor->>Kafka: publica io.cards.issued.v1
+    Kafka->>Issuer: entrega io.cards.issued.v1
+    Issuer->>Issuer: status → ISSUED
+  else fallo tras reintentos
+    Processor->>Kafka: publica io.card.requested.v1.dlq
+    Kafka->>Issuer: entrega io.card.requested.v1.dlq
+    Issuer->>Issuer: status → FAILED
+  end
+
+  Cliente->>Issuer: GET /cards/:requestId/status
+  Issuer-->>Cliente: 200 { requestId, status, updatedAt }
 ```
 
-Dos servicios NestJS independientes comunicados vía Kafka:
+> Todos los eventos de un mismo flujo comparten el mismo `source` (= `requestId`), lo que permite trazarlos en logs y en Kafka UI.
 
-| Servicio | Rol | Puerto |
-|---|---|---|
-| `card-issuer` | API REST + consumidor de resultados | 3000 |
-| `card-processor` | Consumidor Kafka + emisor de tarjetas | — |
+| Servicio | Rol | HTTP | Kafka produce | Kafka consume | Persistencia |
+|---|---|---|---|---|---|
+| `card-issuer` | Admisión + consulta de estado | `:3000` | `io.card.requested.v1` | `io.cards.issued.v1`, `io.card.requested.v1.dlq` | SQLite `card_requests` |
+| `card-processor` | Emisión + reintentos | — | `io.cards.issued.v1`, `io.card.requested.v1.dlq` | `io.card.requested.v1` | SQLite `cards` |
 
 ---
 
