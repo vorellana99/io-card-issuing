@@ -1,12 +1,13 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { EventTypes, KafkaTopics } from '../common/cloud-event';
 import { EventPublisherService } from '../kafka/event-publisher.service';
+import { CardStatusResponseDto } from './dto/card-status-response.dto';
 import { IssueCardRequestDto } from './dto/issue-card-request.dto';
 import { IssueCardResponseDto } from './dto/issue-card-response.dto';
-import { CardRequest } from './entities/card-request.entity';
+import { CardRequest, CardRequestStatus } from './entities/card-request.entity';
 
 @Injectable()
 export class CardsService {
@@ -69,5 +70,28 @@ export class CardsService {
     });
 
     return { requestId, status: 'PENDING' };
+  }
+
+  async getStatus(requestId: string): Promise<CardStatusResponseDto> {
+    const record = await this.cardRequestRepo.findOne({ where: { requestId } });
+    if (!record) {
+      throw new NotFoundException(`No se encontró la solicitud con requestId: ${requestId}`);
+    }
+    return { requestId: record.requestId, status: record.status, updatedAt: record.updatedAt };
+  }
+
+  async updateStatus(requestId: string, status: CardRequestStatus): Promise<void> {
+    const record = await this.cardRequestRepo.findOne({ where: { requestId } });
+    if (!record) {
+      this.logger.warn({
+        msg: 'updateStatus: requestId desconocido, evento ignorado',
+        requestId,
+        status,
+      });
+      return;
+    }
+    record.status = status;
+    await this.cardRequestRepo.save(record);
+    this.logger.log({ msg: 'Estado actualizado', requestId, status });
   }
 }

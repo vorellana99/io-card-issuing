@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
@@ -16,6 +17,22 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
+  const brokers = (process.env.KAFKA_BROKERS ?? 'localhost:9094')
+    .split(',')
+    .map((b) => b.trim())
+    .filter(Boolean);
+  const clientId = process.env.KAFKA_CLIENT_ID ?? 'card-issuer';
+  const groupId = process.env.KAFKA_GROUP_ID ?? 'card-issuer-group';
+
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.KAFKA,
+    options: {
+      client: { clientId, brokers },
+      consumer: { groupId, allowAutoTopicCreation: true },
+      subscribe: { fromBeginning: false },
+    },
+  });
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Card Issuer API')
     .setDescription(
@@ -30,6 +47,8 @@ async function bootstrap(): Promise<void> {
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: { defaultModelsExpandDepth: 2 },
   });
+
+  await app.startAllMicroservices();
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);

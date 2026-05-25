@@ -9,5 +9,6 @@ import { CardRequest } from './entities/card-request.entity';
   imports: [TypeOrmModule.forFeature([CardRequest]), KafkaModule],
   controllers: [CardsController],
   providers: [CardsService],
+  exports: [CardsService],
 })
 export class CardsModule {}
