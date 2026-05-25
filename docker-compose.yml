@@ -1,7 +1,6 @@
 services:
   kafka:
     image: apache/kafka:3.8.0
-    container_name: io-kafka
     ports:
       - "9092:9092"
       - "9094:9094"
@@ -31,7 +30,6 @@ services:
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    container_name: io-kafka-ui
     depends_on:
       - kafka
     ports:
@@ -40,3 +38,49 @@ services:
       KAFKA_CLUSTERS_0_NAME: io-local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       DYNAMIC_CONFIG_ENABLED: "true"
+
+  card-issuer:
+    build:
+      context: ./card-issuer
+      dockerfile: Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      LOG_LEVEL: info
+      LOG_PRETTY: "false"
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: card-issuer
+      KAFKA_GROUP_ID: card-issuer-group
+      SQLITE_PATH: /data/card-issuer.sqlite
+    volumes:
+      - issuer-data:/data
+
+  card-processor:
+    build:
+      context: ./card-processor
+      dockerfile: Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      LOG_PRETTY: "false"
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: card-processor
+      KAFKA_GROUP_ID: card-processor-group
+      SQLITE_PATH: /data/card-processor.sqlite
+      SIMULATED_LATENCY_MIN_MS: 200
+      SIMULATED_LATENCY_MAX_MS: 500
+      SUCCESS_PROBABILITY: "0.6"
+    volumes:
+      - processor-data:/data
+
+volumes:
+  issuer-data:
+  processor-data:
