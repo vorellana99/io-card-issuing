@@ -41,6 +41,16 @@ export class CardIssuanceService {
   }
 
   async handle(source: string, payload: CardRequestedPayload): Promise<void> {
+    const existing = await this.cardRepo.findOne({ where: { requestId: source } });
+    if (existing) {
+      this.logger.warn({
+        msg: 'Evento duplicado descartado (idempotencia)',
+        source,
+        cardId: existing.cardId,
+      });
+      return;
+    }
+
     this.logger.log({
       msg: 'Procesando solicitud de tarjeta',
       source,

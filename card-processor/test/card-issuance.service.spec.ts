@@ -34,10 +34,11 @@ function makePublisher(): PublisherMock {
   };
 }
 
-function makeRepo() {
+function makeRepo(existing: Record<string, unknown> | null = null) {
   return {
     create: jest.fn((data) => data),
     save: jest.fn(async (data) => data),
+    findOne: jest.fn(async () => existing),
   };
 }
 
@@ -146,5 +147,18 @@ describe('CardIssuanceService', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('evento duplicado es descartado sin reprocesar (idempotencia)', async () => {
+    const existingCard = { cardId: 'card-existing', requestId: 'source-dup' };
+    const repo = makeRepo(existingCard);
+    const publisher = makePublisher();
+    const service = new CardIssuanceService(makeConfig() as any, publisher as any, repo as any);
+
+    await service.handle('source-dup', payload);
+
+    expect(repo.findOne).toHaveBeenCalledWith({ where: { requestId: 'source-dup' } });
+    expect(repo.save).not.toHaveBeenCalled();
+    expect(publisher.publish).not.toHaveBeenCalled();
   });
 });
