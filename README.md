@@ -77,6 +77,19 @@ curl -s http://localhost:3000/cards/<requestId>/status | jq
 
 > Esperar ~1-2 segundos entre ambos comandos para que el `card-processor` complete la emisión. El estado pasará de `PENDING` a `ISSUED`.
 
+
+**Tests de integración con el stack real:**
+
+```bash
+# Con el stack corriendo
+cd card-issuer && npm run test:integration
+
+# Apuntar a otro entorno (staging, CI, etc.)
+cd card-issuer && ISSUER_URL=http://staging:3000 npm run test:integration
+```
+
+Ejercita el flujo completo sin mocks: HTTP → Kafka → card-processor → Kafka → card-issuer → SQLite.
+
 ---
 
 ### Solo Kafka (desarrollo local)
