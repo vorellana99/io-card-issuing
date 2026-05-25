@@ -4,9 +4,13 @@ import {
   ApiBadRequestResponse,
   ApiBody,
   ApiConflictResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
+  ApiParam,
 } from '@nestjs/swagger';
 import { HttpErrorResponseDto } from '../common/dto/http-error.dto';
+import { CardStatusResponseDto } from './dto/card-status-response.dto';
 import { IssueCardRequestDto } from './dto/issue-card-request.dto';
 import { IssueCardResponseDto } from './dto/issue-card-response.dto';
 
@@ -87,5 +91,31 @@ export function IssueCardDocs() {
     ApiAcceptedResponse(RESPONSE_202),
     ApiBadRequestResponse(RESPONSE_400),
     ApiConflictResponse(RESPONSE_409),
+  );
+}
+
+export function GetCardStatusDocs() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Consulta el estado del flujo de emisión',
+      description:
+        'Devuelve el estado actual de la solicitud identificada por `requestId`. ' +
+        'El estado refleja el resultado del procesamiento asíncrono: `PENDING` mientras el ' +
+        '`card-processor` aún no respondió, `ISSUED` si la tarjeta fue emitida con éxito, ' +
+        'o `FAILED` si el processor agotó los reintentos y publicó en DLQ.',
+    }),
+    ApiParam({
+      name: 'requestId',
+      description: 'UUID devuelto por `POST /cards/issue`.',
+      example: '07bbca7e-7d1a-4124-9d81-d5a2b00d2063',
+    }),
+    ApiOkResponse({
+      description: 'Estado actual de la solicitud.',
+      type: CardStatusResponseDto,
+    }),
+    ApiNotFoundResponse({
+      description: '`requestId` no existe en el sistema.',
+      type: HttpErrorResponseDto,
+    }),
   );
 }

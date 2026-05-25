@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
 import { CardsModule } from './cards/cards.module';
 import { CardRequest } from './cards/entities/card-request.entity';
+import { ConsumerModule } from './consumer/consumer.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { CardRequest } from './cards/entities/card-request.entity';
       }),
     }),
     CardsModule,
+    ConsumerModule,
   ],
 })
 export class AppModule {}

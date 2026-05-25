@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { CardsService } from '../src/cards/cards.service';
 import { CardRequest } from '../src/cards/entities/card-request.entity';
 import { IssueCardRequestDto } from '../src/cards/dto/issue-card-request.dto';
@@ -11,12 +11,18 @@ type AnyRepo = {
 };
 
 function makeRepo(initial: CardRequest[] = []): AnyRepo {
-  const store = new Map<string, CardRequest>(initial.map((r) => [r.documentNumber, r]));
+  const byDocNumber = new Map<string, CardRequest>(initial.map((r) => [r.documentNumber, r]));
+  const byRequestId = new Map<string, CardRequest>(initial.map((r) => [r.requestId, r]));
   return {
-    findOne: jest.fn(async ({ where }: any) => store.get(where.documentNumber) ?? null),
+    findOne: jest.fn(async ({ where }: any) => {
+      if (where.documentNumber !== undefined) return byDocNumber.get(where.documentNumber) ?? null;
+      if (where.requestId !== undefined) return byRequestId.get(where.requestId) ?? null;
+      return null;
+    }),
     create: jest.fn((data: CardRequest) => data),
     save: jest.fn(async (entity: CardRequest) => {
-      store.set(entity.documentNumber, entity);
+      byDocNumber.set(entity.documentNumber, entity);
+      byRequestId.set(entity.requestId, entity);
       return entity;
     }),
   };
@@ -109,5 +115,70 @@ describe('CardsService', () => {
 
     const [, event] = publisher.publish.mock.calls[0];
     expect(event.data.forceError).toBe(true);
+  });
+
+  describe('getStatus', () => {
+    it('devuelve requestId, status y updatedAt cuando existe', async () => {
+      const record: CardRequest = {
+        requestId: 'abc-123',
+        documentNumber: '11564321',
+        fullName: 'Jose Pérez',
+        email: 'joseperez@example.com',
+        age: 25,
+        productType: 'VISA',
+        productCurrency: 'PEN',
+        forceError: false,
+        status: 'ISSUED',
+        createdAt: new Date('2026-01-01'),
+        updatedAt: new Date('2026-01-02'),
+      };
+      const repo = makeRepo([record]);
+      const service = new CardsService(repo as any, makePublisher() as any);
+
+      const result = await service.getStatus('abc-123');
+
+      expect(result.requestId).toBe('abc-123');
+      expect(result.status).toBe('ISSUED');
+      expect(result.updatedAt).toEqual(new Date('2026-01-02'));
+    });
+
+    it('lanza NotFoundException si el requestId no existe', async () => {
+      const repo = makeRepo();
+      const service = new CardsService(repo as any, makePublisher() as any);
+
+      await expect(service.getStatus('no-existe')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('actualiza el status y persiste', async () => {
+      const record: CardRequest = {
+        requestId: 'req-001',
+        documentNumber: '11564321',
+        fullName: 'Jose Pérez',
+        email: 'joseperez@example.com',
+        age: 25,
+        productType: 'VISA',
+        productCurrency: 'PEN',
+        forceError: false,
+        status: 'PENDING',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const repo = makeRepo([record]);
+      const service = new CardsService(repo as any, makePublisher() as any);
+
+      await service.updateStatus('req-001', 'ISSUED');
+
+      expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'ISSUED' }));
+    });
+
+    it('no lanza si el requestId es desconocido (tolerante a fallos)', async () => {
+      const repo = makeRepo();
+      const service = new CardsService(repo as any, makePublisher() as any);
+
+      await expect(service.updateStatus('inexistente', 'FAILED')).resolves.toBeUndefined();
+      expect(repo.save).not.toHaveBeenCalled();
+    });
   });
 });
