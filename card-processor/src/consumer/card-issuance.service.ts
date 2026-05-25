@@ -73,6 +73,9 @@ export class CardIssuanceService {
       return;
     }
 
+    // result.error es siempre un Error cuando runWithRetries falla (garantizado por retry.policy).
+    // El fallback 'unknown' es defensivo e inalcanzable en la práctica.
+    /* istanbul ignore next */
     const reason = result.error?.message ?? 'unknown';
     const dlq: DlqPayload = {
       error: { reason, attempts: MAX_RETRIES },

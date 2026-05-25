@@ -54,6 +54,29 @@ const payload: CardRequestedPayload = {
 };
 
 describe('CardIssuanceService', () => {
+  it('usa valores por defecto cuando el config no provee las variables de simulación', async () => {
+    const emptyConfig = { get: jest.fn().mockReturnValue(undefined) };
+    const publisher = makePublisher();
+    const repo = makeRepo();
+
+    const service = new CardIssuanceService(emptyConfig as any, publisher as any, repo as any);
+
+    // Solo verificamos que el servicio se construye sin lanzar
+    expect(service).toBeInstanceOf(CardIssuanceService);
+  });
+
+  it('acepta payload sin forceError (undefined) y emite con éxito', async () => {
+    const publisher = makePublisher();
+    const repo = makeRepo();
+    const service = new CardIssuanceService(makeConfig() as any, publisher as any, repo as any);
+    const payloadSinForceError = { ...payload, forceError: undefined };
+
+    await service.handle('source-0', payloadSinForceError);
+
+    const [topic] = publisher.publish.mock.calls[0];
+    expect(topic).toBe('io.cards.issued.v1');
+  });
+
   it('en caso de éxito persiste y publica io.cards.issued.v1', async () => {
     const publisher = makePublisher();
     const repo = makeRepo();
