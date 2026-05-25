@@ -121,6 +121,7 @@ describe('CardIssuanceService', () => {
       expect(event.source).toBe('source-2');
       expect(event.data.error.reason).toMatch(/forceError/);
       expect(event.data.error.attempts).toBe(3);
+      expect(event.data.error.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(event.data.originalPayload.customer.documentNumber).toBe('11564321');
     } finally {
       jest.useRealTimers();

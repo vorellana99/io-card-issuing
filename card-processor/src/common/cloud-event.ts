@@ -57,6 +57,6 @@ export interface CardIssuedPayload {
 }
 
 export interface DlqPayload {
-  error: { reason: string; attempts: number };
+  error: { reason: string; attempts: number; timestamp: string };
   originalPayload: CardRequestedPayload;
 }

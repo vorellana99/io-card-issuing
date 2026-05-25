@@ -88,7 +88,7 @@ export class CardIssuanceService {
     /* istanbul ignore next */
     const reason = result.error?.message ?? 'unknown';
     const dlq: DlqPayload = {
-      error: { reason, attempts: MAX_RETRIES },
+      error: { reason, attempts: MAX_RETRIES, timestamp: new Date().toISOString() },
       originalPayload: payload,
     };
     const dlqEvent = this.publisher.buildEvent(source, 2, EventTypes.CARD_REQUESTED_DLQ, dlq);
