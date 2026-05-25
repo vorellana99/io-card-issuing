@@ -39,12 +39,28 @@ describe('CardEventsController', () => {
       expect(service.updateStatus).not.toHaveBeenCalled();
     });
 
-    it('no relanza si updateStatus falla', async () => {
+    it('descarta el mensaje sin lanzar si el string no es JSON válido', async () => {
+      const service = makeService();
+      const controller = new CardEventsController(service as any);
+
+      await expect(controller.onCardIssued('no-es-json{')).resolves.toBeUndefined();
+      expect(service.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('no relanza si updateStatus falla con Error', async () => {
       const service = makeService();
       service.updateStatus.mockRejectedValueOnce(new Error('db error'));
       const controller = new CardEventsController(service as any);
 
       await expect(controller.onCardIssued(envelope('req-err'))).resolves.toBeUndefined();
+    });
+
+    it('no relanza si updateStatus falla con valor no-Error', async () => {
+      const service = makeService();
+      service.updateStatus.mockRejectedValueOnce('string error');
+      const controller = new CardEventsController(service as any);
+
+      await expect(controller.onCardIssued(envelope('req-err-str'))).resolves.toBeUndefined();
     });
   });
 
@@ -66,12 +82,28 @@ describe('CardEventsController', () => {
       expect(service.updateStatus).not.toHaveBeenCalled();
     });
 
-    it('no relanza si updateStatus falla', async () => {
+    it('descarta el mensaje sin lanzar si el string no es JSON válido', async () => {
+      const service = makeService();
+      const controller = new CardEventsController(service as any);
+
+      await expect(controller.onCardDlq('no-es-json{')).resolves.toBeUndefined();
+      expect(service.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('no relanza si updateStatus falla con Error', async () => {
       const service = makeService();
       service.updateStatus.mockRejectedValueOnce(new Error('db error'));
       const controller = new CardEventsController(service as any);
 
       await expect(controller.onCardDlq(envelope('req-dlq-err'))).resolves.toBeUndefined();
+    });
+
+    it('no relanza si updateStatus falla con valor no-Error', async () => {
+      const service = makeService();
+      service.updateStatus.mockRejectedValueOnce('string error');
+      const controller = new CardEventsController(service as any);
+
+      await expect(controller.onCardDlq(envelope('req-dlq-str'))).resolves.toBeUndefined();
     });
   });
 
