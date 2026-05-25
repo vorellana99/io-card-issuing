@@ -44,6 +44,75 @@ sequenceDiagram
 
 ---
 
+## Stack tecnológico y características
+
+### Lenguaje y framework
+
+- TypeScript 5 + NestJS 10
+- Dos servicios Node.js independientes sin workspaces compartidos — cada uno es dueño de su propio contrato
+
+### Mensajería event-driven
+
+- Apache Kafka 3.8 en modo KRaft (sin Zookeeper), broker single-node
+- KafkaJS como cliente en ambos servicios
+- Envelope CloudEvents-style `{ id, source, type, data }` con headers `ce-id`, `ce-source`, `ce-type`
+- `card-issuer` en modo híbrido HTTP + Kafka consumer (`connectMicroservice` + `startAllMicroservices`)
+- `card-processor` como microservicio puro Kafka (`createMicroservice`)
+- `ensureTopics` en el arranque del processor para evitar `UNKNOWN_TOPIC_OR_PARTITION` contra Kafka virgen
+
+### Persistencia
+
+- SQLite vía `better-sqlite3` — una base de datos por servicio, completamente independientes
+- TypeORM como ORM con `synchronize: true`
+- Unique constraint en `documentNumber` — un cliente, una sola tarjeta
+
+### Validación
+
+- `class-validator` + `class-transformer` en DTOs
+- `ValidationPipe` global con `whitelist` y `forbidNonWhitelisted`
+- Reglas de dominio: DNI exactamente 8 dígitos, age ≥ 18, producto VISA, currency PEN o USD
+
+### Resiliencia y reintentos
+
+- Backoff fijo: 1s / 2s / 4s, máximo 4 intentos (1 inicial + 3 retries)
+- Dead Letter Queue en `io.card.requested.v1.dlq` cuando se agotan todos los reintentos
+- El handler Kafka no relanza errores → el offset avanza siempre, evitando duplicación de reintentos
+- `forceError: true` en el payload fuerza fallo determinístico en cada intento (útil para ejercitar el camino DLQ)
+
+### Observabilidad y logging
+
+- `nestjs-pino` (Pino estructurado) en ambos servicios
+- `pino-pretty` en desarrollo, JSON plano en producción (contenedores)
+- `source` (= `requestId`) como correlation ID presente en todos los logs del mismo flujo
+- Kafka UI (`provectuslabs/kafka-ui`) en `localhost:8080` para inspección de tópicos, mensajes y consumer groups en tiempo real
+
+### Documentación de API
+
+- Swagger / OpenAPI vía `@nestjs/swagger`, disponible en `http://localhost:3000/docs`
+- Ejemplos de request precargados en Swagger: happy path y camino DLQ (`forceError: true`)
+
+### Testing
+
+| Tipo | Servicio | Tests | Cobertura |
+|---|---|---|---|
+| Unitarios | card-issuer | 39 tests, 5 suites | 100% en archivos de negocio |
+| Unitarios | card-processor | 31 tests, 5 suites | 100% en archivos de negocio |
+| E2E | card-issuer | 8 casos | AppModule real + SQLite `:memory:` + Kafka mockeado |
+| Integración | card-issuer | 4 casos | Stack Docker real, sin ningún mock |
+
+- Framework: Jest + ts-jest con mocks manuales (sin `jest.mock` de módulos)
+- Los tests e2e no requieren infraestructura externa — usan `Test.createTestingModule` con SQLite en memoria
+- Los tests de integración ejercitan el flujo completo: HTTP → Kafka → card-processor → Kafka → card-issuer → SQLite
+
+### Infraestructura
+
+- Docker Compose con cuatro servicios: Kafka KRaft, kafka-ui, card-issuer y card-processor en red compartida
+- Dockerfiles multi-stage (`node:20-alpine`) — `python3`, `make` y `g++` en el builder para compilar los bindings nativos de `better-sqlite3`
+- Volúmenes nombrados para persistencia de SQLite entre reinicios de contenedores
+- `depends_on: condition: service_healthy` garantiza que los servicios arrancan solo cuando Kafka está listo
+
+---
+
 ## Levantar el entorno
 
 ### Stack completo en Docker (demo / entrega)
