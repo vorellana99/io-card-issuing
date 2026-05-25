@@ -123,11 +123,13 @@ Luego, en terminales separadas:
 ```bash
 # Terminal 1
 cd card-issuer
+cp .env.example .env   # solo la primera vez
 npm install
 npm run start:dev
 
 # Terminal 2
 cd card-processor
+cp .env.example .env   # solo la primera vez
 npm install
 npm run start:dev
 ```
